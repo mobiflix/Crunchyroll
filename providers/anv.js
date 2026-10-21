@@ -219,6 +219,10 @@ async function buildStreams(episode, cookie, pageUrl) {
             const label = source.label?.trim();
             if (!streamUrl || !label) continue;
 
+            // ✅ ORANGE SERVER LANG ANG TATANGGAPIN
+            // Gagamit ng .toLowerCase() para kahit "Orange", "orange", o "ORANGE" ay mahuli.
+            if (label.toLowerCase() !== "orange") continue;
+
             const uses = urlUses.get(streamUrl) || 0;
             urlUses.set(streamUrl, uses + 1);
 
