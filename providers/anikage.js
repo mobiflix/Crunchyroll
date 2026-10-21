@@ -51,22 +51,43 @@ function pickTitle(t) {
     return (t.english || t.romaji || t.native || "").trim();
 }
 
+// Helper function para i-normalize ang strings (bawas spaces, symbols, lowercase)
+function normalizeTitle(str) {
+    if (!str) return "";
+    return str.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 async function searchSlug(query) {
     const data = await getJson(`${API_BASE}/search?q=${encodeURIComponent(query)}&limit=5`);
     const results = (data && data.data) || [];
     if (!results.length) return null;
-    const q = query.toLowerCase();
+    
+    const normalizedQuery = normalizeTitle(query);
+
+    // Mag-loop sa lahat ng results at humanap ng EKSAKTONG tugma
     for (const r of results) {
-        if (pickTitle(r.title).toLowerCase() === q) return r.slug;
+        const resultTitle = normalizeTitle(pickTitle(r.title));
+        if (resultTitle === normalizedQuery) {
+            return r.slug;
+        }
     }
-    return results[0].slug || null;
+    
+    // WALANG FALLBACK SA results[0]. Kung walang exact match, return null.
+    return null;
 }
 
-async function findSlug(title, season, seasonName) {
+async function findSlug(title, season, seasonName, mediaType) {
     const queries = [];
-    if (seasonName) queries.push(seasonName);
-    if (season != null && season > 1) queries.push(`${title} Season ${season}`);
+    
+    // TV Shows lang ang may season-based queries
+    if (mediaType === "tv") {
+        if (seasonName) queries.push(seasonName);
+        if (season != null && season > 1) queries.push(`${title} Season ${season}`);
+    }
+    
+    // Base title (dapat ito ang laging huling option)
     queries.push(title);
+
     for (const q of queries) {
         const slug = await searchSlug(q);
         if (slug) return slug;
@@ -113,10 +134,16 @@ async function fetchSources(slug, episode, provider, lang) {
 async function getStreams(tmdbId, mediaType, season, episode) {
     try {
         if (mediaType === "tv" && (season == null || episode == null)) return [];
+        
         const details = await getTmdbDetails(tmdbId, mediaType, season);
         if (!details || !details.title) return [];
-        const slug = await findSlug(details.title, season, details.seasonName);
+        
+        // Ipasa ang mediaType para malaman ni findSlug kung mag-sesearch ng season o hindi
+        const slug = await findSlug(details.title, season, details.seasonName, mediaType);
+        
+        // Kung walang nahanap na eksaktong slug, wag nang ituloy
         if (!slug) return [];
+        
         const epNum = mediaType === "movie" ? 1 : episode;
         const results = await Promise.all(
             SOURCES.flatMap(p => LANGS.map(l => fetchSources(slug, epNum, p, l)))
